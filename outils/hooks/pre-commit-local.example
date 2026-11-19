@@ -1,0 +1,9 @@
+# Modèle du fichier local du garde-fou : copiez-le en <dossier git>/pre-commit-local.txt
+#   cp outils/hooks/pre-commit-local.example .git/pre-commit-local.txt
+# Il n'est jamais versionné : c'est lui qui porte les noms que vous ne voulez
+# pas voir apparaître dans un commit (personnes, machines du réseau).
+#
+# Format : nom (libre)<TABULATION>expression régulière
+#
+# identité      (?i)\b(prenom1|prenom2|nom_de_famille)\b
+# machine       (?i)\b(nom-du-serveur|nom-du-nas)\b

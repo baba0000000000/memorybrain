@@ -1,0 +1,125 @@
+# ============================================================================
+# MemoryBrain — on versionne le CODE, jamais les DONNÉES.
+#
+# Règle de lecture : tout ce qui suit décrit un fichier qui ne doit JAMAIS
+# partir sur un dépôt distant. Les sorties du programme, les corpus audio, les
+# empreintes vocales et les secrets vivent sur la machine, pas dans Git.
+#
+# Vérifier les oublis :  git ls-files -ci --exclude-standard
+# ============================================================================
+
+# --- Secrets et configuration locale ----------------------------------------
+.env
+.env.*
+!.env.example
+config.local.py
+*.token
+*.secret
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa*
+id_ed25519*
+.htpasswd
+.gitleaks-baseline.json
+
+# --- Corpus audio : jamais dans Git -----------------------------------------
+syncthing-inbox/
+audio/
+chunks/
+transcripts/
+work/
+*.wav
+*.WAV
+*.mp3
+*.MP3
+*.m4a
+*.M4A
+*.ogg
+*.OGG
+*.flac
+*.FLAC
+*.opus
+*.mp4
+*.MP4
+*.webm
+
+# --- Base, états et sorties du programme ------------------------------------
+database/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+logs/
+*.log
+extraction/ideas/
+extraction/notes/
+extraction/todo/
+*.nettoyage.json
+
+# --- Empreintes et références vocales (données biométriques) ----------------
+reference/
+empreintes/
+*empreinte*
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.emb
+
+# --- Sorties markdown générées (le wiki personnel n'est pas ici) ------------
+markdown/
+fiches/
+
+# --- `diarization/` et `sessions/` sont des PAQUETS DE CODE -----------------
+# Ils ne doivent JAMAIS être ignorés en bloc, sinon le programme ne démarre
+# plus (`ImportError`). Seules leurs sorties éventuelles le sont :
+diarization/*.json
+sessions/*.json
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# --- Android ----------------------------------------------------------------
+android/build/
+android/.gradle/
+android/local.properties
+*.apk
+*.aab
+
+# --- Archives et binaires ---------------------------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.bundle
+*.7z
+
+# --- Système et éditeurs ----------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Divers -----------------------------------------------------------------
+# Notes personnelles locales : à garder hors du dépôt.

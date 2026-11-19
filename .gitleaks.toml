@@ -1,0 +1,30 @@
+# ============================================================================
+# Gitleaks — détection de secrets à l'ajout et dans l'historique.
+#
+#   gitleaks dir .        # arbre de travail
+#   gitleaks git .        # tout l'historique accessible
+#
+# Les règles par défaut sont conservées ; on n'ajoute que ce qui manque.
+# ============================================================================
+[extend]
+useDefault = true
+
+# Le dépôt est public : une valeur trouvée est une valeur compromise.
+# Le remède n'est pas de la supprimer du fichier, c'est de la révoquer.
+
+[allowlist]
+description = "Faux positifs assumés (motifs de détection, exemples documentaires)"
+paths = [
+  # Ce fichier et le garde-fou contiennent des expressions régulières qui
+  # ressemblent à des secrets : c'est leur métier, pas une fuite.
+  '''outils/hooks/pre-commit''',
+  '''outils/verifier_confidentialite.py''',
+  # Modèle de configuration : uniquement des noms de variables, aucune valeur.
+  '''.env.example''',
+]
+regexes = [
+  # Variables d'environnement non renseignées : ${VAR}, $(cmd), ou vide.
+  '''\$\{[A-Z_]+\}''',
+  # Témoin de test volontairement faux.
+  '''example\.(com|org)|test@example\.com''',
+]

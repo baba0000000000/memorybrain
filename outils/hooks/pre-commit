@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""GARDE-FOU ANTI-SECRETS — refuse un commit qui contient un secret.
+
+S'active une fois par clone, sans copie à maintenir :
+
+    git config core.hooksPath outils/hooks
+
+Ne pas copier ce fichier dans `.git/hooks` : une copie n'est pas suivie par
+git, elle ne se mettrait jamais à jour et disparaîtrait au prochain clone.
+
+Il regarde ce qui va être enregistré (les fichiers mis en scène) et refuse le
+commit si quelque chose ressemble à un secret : jeton, clé, mot de passe,
+identifiants dans une URL, clé privée.
+
+Il refuse aussi les données personnelles : chemin de compte, dossier personnel,
+adresse IP privée, identifiant d'appareil ou de locuteur, nom d'hôte écrit en
+dur, métrique de corpus, extension de fichier de données — et, si le fichier
+local décrit plus bas existe, les noms de personnes et de machines.
+
+Pour passer outre volontairement sur une ligne précise, ajouter `no-secret` en
+commentaire sur cette ligne.
+
+Aucun réseau, aucune dépendance : c'est du texte analysé en local.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# (nom, expression régulière)
+MOTIFS = [
+    ("jeton GitHub",            r"gh[pousr]_[A-Za-z0-9]{30,}"),
+    ("jeton GitHub fin",        r"github_pat_[A-Za-z0-9_]{40,}"),
+    ("clé OpenAI",              r"sk-[A-Za-z0-9]{20,}"),
+    ("clé Anthropic",           r"sk-ant-[A-Za-z0-9\-_]{20,}"),
+    ("jeton Hugging Face",      r"hf_[A-Za-z0-9]{30,}"),
+    ("clé AWS",                 r"AKIA[0-9A-Z]{16}"),
+    ("clé privée",              r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ("identifiants dans une URL", r"[a-z]+://[^:@/\s]+:[^@/\s]{6,}@"),
+    # une valeur qui commence par ${ n'est pas un secret, c'est une variable
+    ("mot de passe en clair",   r"(?i)(password|passwd|mot_de_passe|secret|api[_-]?key|token)"
+                                r"\s*[:=]\s*[\"'](?!\$\{)[^\"']{8,}[\"']"),
+    ("longue chaîne hexadécimale", r"\b[0-9a-f]{40,64}\b"),
+]
+
+# Chemins qu'on ne peut pas se permettre d'ignorer, mais qui contiennent
+# souvent des faux positifs (exemples, documentation).
+TOLERES = ("requirements", ".md")
+
+# ---------------------------------------------------------------------------
+# DONNÉES PERSONNELLES — seconde famille de motifs.
+#
+# Un hook qui ne cherche que des secrets laisse passer les chemins d'un compte,
+# les noms de machines du réseau et les noms des personnes enregistrées : c'est
+# cette famille-là qui manquait. Ces motifs refusent le commit pour n'importe
+# quel fichier, y compris .md.
+#
+# Ils décrivent des FORMES, pas des valeurs : aucun nom réel n'est écrit ici.
+# Toute famille ajoutée ici doit l'être aussi dans
+# outils/verifier_confidentialite.py (le second regard, lancé plus bas) — un
+# test le vérifie. Les deux listes doivent rester d'accord.
+# ---------------------------------------------------------------------------
+MOTIFS_PERSO = [
+    ("chemin de compte",        r"/home/[a-z][a-z0-9_-]*/"),
+    ("chemin de compte",        r"/Users/[a-z][a-z0-9_-]*/"),
+    ("chemin Windows",          r"[A-Za-z]:[\\/]Users"),
+    # Tout chemin sous ~/ sauf les dossiers XDG (~/.local/share, ~/.config…) :
+    # ce sont ceux de toute application Linux, pas une arborescence privée.
+    ("dossier personnel",       r"~/(?!\.)[\w.-]+/"),
+    ("chemin personnel codé",   r"Path\.home\(\)\s*/\s*[\"'](?!\.)"),
+    ("dossier numéroté",        r"[\"'](?:0\d|1\d)-[A-Z][\w-]*[\"']"),
+    ("identifiant d'appareil",  r"(?i)sync-conflict-\d{8}-\d{6}-(?!AAAAAAA|FAKE001)[A-Z0-9]{7}"),
+    ("identifiant de locuteur", r"(?i)\bspeaker_(?!0{3}[01]\b)\d{4}\b"),
+    ("hôte imposé à un worker", r"--worker[\"']?\s*[,:]\s*[\"'](?!localhost[\"']|[\w.-]*\.invalid[\"'])[\w.@-]+[\"']"),
+    ("hôte dans un libellé",    r"[\"']hub:(?!localhost[\"']|[\w.@-]*\.invalid[\"'])[a-z][\w.@-]*"),
+    ("hôte@file",               r"[\"'][a-z][\w-]{1,20}@[a-z][\w-]{0,20}[\"']"),
+    ("nom de machine local",    r"(?i)\b[a-z][a-z0-9-]*\.local\b(?![.-])"),
+    ("IP privée",               r"\b192\.168\.\d{1,3}\.\d{1,3}\b"),
+    ("IP privée",               r"\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"),
+    ("IP privée",               r"\b172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b"),
+    ("date de mesure",          r"(?i)\b(mesur\w*|relev\w*|constat\w*)\s+(?:ici\s+)?(?:le|au)\s+\d{4}-\d{2}-\d{2}"),
+    ("métrique de corpus",      r"(?i)\b\d{1,3}(?:[ .]\d{3})+\s*(chunks?|fichiers?|groupes?|segments?"
+                                r"|profils?|tours?|conflits?|transcripts?|timestamps?|paires?|copies?"
+                                r"|mots|enregistrements?|dict[ée]es?)"),
+    ("métrique de corpus",      r"(?i)\b\d{3,7}\s+(conflits?|transcripts?|timestamps?|paires?|copies?"
+                                r"|enregistrements?|dict[ée]es?|chunks?|fichiers?|segments?|profils?|tours?)\b"),
+    ("volume de calcul",        r"(?i)\b\d+(?:[.,]\d+)?\s*h(?:eures?)?\s*(?:d['’]?\s*audio|de\s+calcul|de\s+CPU)"),
+    ("volume de calcul",        r"(?i)\b\d+\s*min(?:utes)?\s+(?:de|par)\s+(?:calcul|heure\s+d['’]?\s*audio)"),
+    ("dispersion de mesures",   r"(?i)^\s*[#*].*\b(min|max|moyenne|m[ée]diane)\b.*\d[.,]\d{2,}"),
+    ("relevé réel",             r"(?i)^\s*[#*].*(mesures?\s+r[ée]elles?|relev[ée]s?\s+r[ée]els?|r[ée]sultats?\s+mesur[ée]s?)"),
+    ("seuil de corpus",         r"(?i)assertGreater(?:Equal)?\(\s*len\([^)]*\),\s*\d{3,}"),
+    ("modèle de matériel",      r"(?i)\b(?:rtx|gtx|arc\s?a|radeon|ryzen|gfx)\s?-?\d{3,4}\b"),
+    ("adresse e-mail",          r"[\w.+-]+@[\w-]+\.[a-z]{2,}"),
+]
+
+# Les noms de personnes et de machines ne sont PAS écrits ici : un garde-fou
+# qui liste ce qu'il protège le publie. Ils vivent dans un fichier local, jamais
+# versionné, `<dossier git>/pre-commit-local.txt`, une ligne par motif :
+#     identité<TABABULATION>(?i)\b(prénom1|prénom2)\b
+# Absent : le contrôle des noms est simplement inactif, le reste s'applique.
+def motifs_locaux() -> list[tuple[str, str]]:
+    r = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return []
+    f = Path(r.stdout.strip()) / "pre-commit-local.txt"
+    if not f.exists():
+        return []
+    motifs = []
+    for ligne in f.read_text(encoding="utf-8").splitlines():
+        ligne = ligne.strip()
+        if not ligne or ligne.startswith("#"):
+            continue
+        nom, _, motif = ligne.partition("\t")
+        if motif.strip():
+            motifs.append((nom.strip() or "motif local", motif.strip()))
+    return motifs
+
+# Extensions qui n'ont rien à faire dans un dépôt de code : audio, base,
+# empreintes vocales, binaire d'application.
+EXTENSIONS_INTERDITES = (
+    ".wav", ".ogg", ".opus", ".m4a", ".flac", ".mp3",
+    ".sqlite", ".sqlite3", ".db", ".apk", ".npy", ".pkl",
+)
+
+# Échappatoire : `no-fuite` en commentaire sur une ligne précise, quand c'est
+# un faux positif assumé (ex. le vocabulaire de détection de classify.py).
+ECHAPPATOIRE = ("no-secret", "no-fuite")
+
+
+def fichiers_mis_en_scene() -> list[str]:
+    r = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+                       capture_output=True, text=True)
+    return [f for f in r.stdout.splitlines() if f.strip()]
+
+
+def contenu_stage(f: str) -> str:
+    r = subprocess.run(["git", "show", f":{f}"], capture_output=True, text=True)
+    return r.stdout
+
+
+def main() -> int:
+    problemes: list[str] = []
+    perso = MOTIFS_PERSO + motifs_locaux()
+    for f in fichiers_mis_en_scene():
+        # Les deux garde-fous contiennent leurs propres motifs : ils se
+        # déclencheraient sur eux-mêmes. Ce sont les seuls fichiers exclus, et
+        # ils sont relus à la main. Ils ne contiennent aucun nom réel.
+        if f.endswith(("outils/hooks/pre-commit", ".git/hooks/pre-commit",
+                       "outils/verifier_confidentialite.py")):
+            continue
+        if f.lower().endswith(EXTENSIONS_INTERDITES):
+            problemes.append(f"  {f}  [fichier de données]\n    ce type de fichier n'entre pas dans le dépôt")
+            continue
+        contenu = contenu_stage(f)
+        if not contenu:
+            continue
+        for i, ligne in enumerate(contenu.splitlines(), 1):
+            if any(m in ligne for m in ECHAPPATOIRE):
+                continue
+            trouve = None
+            for nom, motif in MOTIFS:
+                if re.search(motif, ligne):
+                    trouve = nom
+                    break
+            if trouve is None:
+                for nom, motif in perso:
+                    if re.search(motif, ligne):
+                        trouve = nom
+                        break
+            if trouve:
+                # on masque la valeur dans le message
+                apercu = ligne.strip()
+                if len(apercu) > 70:
+                    apercu = apercu[:70] + "…"
+                problemes.append(f"  {f}:{i}  [{trouve}]\n    {apercu}")
+
+    # Second regard : le scanner autonome, qui tranche avec la liste complète
+    # des motifs. Le hook reste utilisable sans lui ; s'il est là, il décide.
+    # Cette CI n'est pas encore activée : c'est le même script qui la lancera.
+    scanner = Path("outils/verifier_confidentialite.py")
+    if scanner.exists():
+        r = subprocess.run([sys.executable, str(scanner), "--staged"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            problemes.append(r.stderr.strip())
+
+    if problemes:
+        print("\n❌ COMMIT REFUSÉ — ce qui suit est un secret ou une donnée personnelle :\n", file=sys.stderr)
+        print("\n".join(problemes), file=sys.stderr)
+        print("\nRien n'a été enregistré. Trois solutions :", file=sys.stderr)
+        print("  1. sortir la valeur du fichier (variable d'environnement, fichier ignoré) ;", file=sys.stderr)
+        print("  2. si c'est un faux positif, ajouter « no-fuite » en commentaire ;", file=sys.stderr)
+        print("  3. si c'est déjà un vrai secret : le RÉVOQUER avant tout (il a pu fuiter).", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,14 @@
+# MemoryBrain — dépendances du programme
+# Python 3.11+
+
+# --- indispensable -----------------------------------------------------------
+numpy>=1.24
+soundfile>=0.12          # lecture/écriture WAV sans ffmpeg en Python
+faster-whisper>=1.0      # Whisper via ctranslate2 (CPU ou CUDA)
+huggingface_hub>=0.20    # téléchargement des modèles
+
+# --- diarisation par empreinte vocale (optionnel) ----------------------------
+# Nécessaires seulement pour speakers/rattacher.py et la diarisation pyannote.
+# torch>=2.1
+# transformers>=4.40
+# pyannote.audio>=3.1
