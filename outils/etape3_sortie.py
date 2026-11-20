@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -34,7 +35,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config
 
-OLLAMA = "http://localhost:11434"
+# Serveur du LLM local : réglable par MEMORYBRAIN_LLM_URL, jamais imposé.
+# La valeur de repli est le port par défaut public de l'outil, pas un réglage
+# propre à une installation — d'où le marqueur ci-dessous, qui l'assume.
+OLLAMA = os.environ.get("MEMORYBRAIN_LLM_URL", "http://localhost:11434")  # no-fuite
 ROUGE = "color:#c0392b"
 
 PROMPT_IDEES = """Tu analyses des passages de la vie quotidienne du propriétaire.

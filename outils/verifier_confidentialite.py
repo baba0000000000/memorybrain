@@ -104,6 +104,11 @@ MOTIFS: list[tuple[str, str]] = [
     ("seuil de corpus",         r"(?i)assertGreater(?:Equal)?\(\s*len\([^)]*\),\s*\d{3,}"),
 
     # — 5. divers ------------------------------------------------------------
+    # Un point d'entrée de service local écrit en dur (« localhost:11434 »)
+    # fige une topologie dans le code publié : l'adresse utile doit venir
+    # d'une variable d'environnement. Le nom du service, lui, n'est pas
+    # personnel — c'est le fait de le câbler qui l'est.
+    ("service local en dur",    r"(?i)\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}\b"),
     ("modèle de matériel",      r"(?i)\b(?:rtx|gtx|arc\s?a|radeon|ryzen|gfx)\s?-?\d{3,4}\b"),
     ("adresse e-mail",          r"[\w.+-]+@[\w-]+\.[a-z]{2,}"),
 ]
@@ -150,6 +155,7 @@ TEMOINS: list[tuple[str, str]] = [
     ("modèle de matériel",      "RTX 4070 Ti"),
     ("adresse e-mail",          "écrire à prenom.nom@exemple.fr"),
     ("seuil de corpus",         "self.assertGreater(len(noms), 4200, \"le corpus a rétréci\")"),
+    ("service local en dur",    "url = \"http://localhost:11434/api/chat\""),
 ]
 
 # Lignes qui doivent PASSER : faux positifs interdits, sous peine de voir le

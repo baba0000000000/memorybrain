@@ -149,10 +149,10 @@ def appeler_llm(prompt: str, port: int | None = None,
                 max_tokens: int = 1200) -> dict:
     """Appelle le LLM local. Ne lève jamais (règle 3).
 
-    Tente chaque entrée de config.LLM_REPLI dans l'ordre. Chocolatine
-    d'abord : c'est le modèle demandé par le propriétaire, servi par le LLM
-    local, et il est nettement meilleur en français que les alternatives.
-    qwen3 reste en repli si le serveur est éteint.
+    Tente chaque entrée de config.LLM_REPLI dans l'ordre. Par défaut il n'y
+    en a qu'une : le modèle choisi par l'installation, servi par son serveur
+    local. Aucun second service n'est interrogé en douce — une installation
+    qui en déclare un le fait explicitement dans sa configuration.
     """
     erreurs = []
     for modele, p, api in config.LLM_REPLI:

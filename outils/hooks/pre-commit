@@ -91,6 +91,9 @@ MOTIFS_PERSO = [
     ("dispersion de mesures",   r"(?i)^\s*[#*].*\b(min|max|moyenne|m[ée]diane)\b.*\d[.,]\d{2,}"),
     ("relevé réel",             r"(?i)^\s*[#*].*(mesures?\s+r[ée]elles?|relev[ée]s?\s+r[ée]els?|r[ée]sultats?\s+mesur[ée]s?)"),
     ("seuil de corpus",         r"(?i)assertGreater(?:Equal)?\(\s*len\([^)]*\),\s*\d{3,}"),
+    # Un point d'entrée de service local écrit en dur fige une topologie :
+    # l'adresse utile doit venir d'une variable, pas du code publié.
+    ("service local en dur",    r"(?i)\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}\b"),
     ("modèle de matériel",      r"(?i)\b(?:rtx|gtx|arc\s?a|radeon|ryzen|gfx)\s?-?\d{3,4}\b"),
     ("adresse e-mail",          r"[\w.+-]+@[\w-]+\.[a-z]{2,}"),
 ]

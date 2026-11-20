@@ -67,10 +67,14 @@ signature si vous voulez distribuer une release.
 
 Ce que fait l'application : elle enregistre par segments d'une minute, puis
 publie chaque segment complet dans la bibliothèque audio partagée du
-téléphone, sous `Music/MemoryAudio/` (MediaStore, type `audio/wav`). Elle ne
-choisit aucun dossier de synchronisation : c'est l'outil de synchronisation que
-vous utilisez (Syncthing ou un autre) qui reprend ce dossier et le fait
-arriver dans `syncthing-inbox/` sur la machine qui exécute le pipeline.
+téléphone (MediaStore, type `audio/wav`). Elle ne choisit aucun dossier de
+synchronisation : c'est l'outil de synchronisation que vous utilisez qui
+reprend ce dossier et le fait arriver dans le dossier d'entrée du pipeline
+(`config.SYNC_INBOX`) sur la machine qui l'exécute.
+
+Le sous-dossier de publication est réglable à la compilation dans
+`android/gradle.properties` (`memorybrain.audioDir`, `Music/MemoryAudio` par
+défaut) : c'est ce nom que votre outil de synchronisation doit reprendre.
 
 Chaque fichier porte son heure de début dans son nom :
 
@@ -143,9 +147,10 @@ set -a; . ./.env; set +a
 
 Variables reconnues : `MEMORYBRAIN_SOCLE` (racine des fiches),
 `MEMORYBRAIN_CORBEILLE` (quarantaine), `MEMORYBRAIN_VOIX` (enregistrements de
-référence du profil 0), `MEMORYBRAIN_NEMOTRON_DIAR` (modèle de diarisation
-GGUF), `HF_TOKEN` (seulement si vous utilisez pyannote), plus les réglages de
-répartition du travail (`MB_WORKER`, `MB_TOTAL_WORKERS`, `MB_LLM`…).
+référence du profil 0), `MEMORYBRAIN_INBOX` (dossier d'entrée de l'audio),
+`MEMORYBRAIN_NEMOTRON_DIAR` (modèle de diarisation GGUF), `HF_TOKEN`
+(seulement si vous utilisez pyannote), plus les réglages de répartition du
+travail (`MB_WORKER`, `MB_TOTAL_WORKERS`, `MB_LLM`…).
 
 `.env` n'est jamais versionné. `config.py` reste la seule source des valeurs
 par défaut : lisez-le avant de changer un chemin, plusieurs sont calculés
@@ -153,7 +158,9 @@ relativement au dossier du projet.
 
 ### 5. Brancher la source audio
 
-Par défaut le programme lit `syncthing-inbox/`. C'est le dossier où un
+Le programme lit le dossier d'entrée déclaré dans `config.SYNC_INBOX`
+(`syncthing-inbox/` par défaut, à côté de `config.py` ; `MEMORYBRAIN_INBOX`
+pour le placer ailleurs ou lui donner un autre nom). C'est le dossier où un
 téléphone (ou n'importe quel outil) dépose des fichiers WAV **dont le nom
 commence par la date-heure de l'enregistrement** :
 
@@ -206,16 +213,19 @@ des noms de fichiers. `--dry-run` montre ce qui serait fait sans rien faire.
 
 ### Transcription : faster-whisper `large-v3-turbo`
 
-Ordres de grandeur par case de 5 minutes (CPU, quantification int8) :
+Ordres de grandeur : trois moteurs ont été comparés sur la même tâche. Le
+premier est celui que le programme utilise, pour son rapport vitesse/qualité
+sur du français parlé :
 
-| moteur | ordre de grandeur | qualité |
-|---|---|---|
-| **faster-whisper `large-v3-turbo`** (ctranslate2, int8, CPU) | quelques dizaines de secondes | référence |
-| Nemotron-3.5-ASR (NVIDIA) | plusieurs minutes | moins bon en français |
-| whisper.cpp (Vulkan) | le plus rapide | **jette des passages entiers** |
+| moteur | qualité constatée |
+|---|---|
+| **faster-whisper `large-v3-turbo`** (ctranslate2, int8, CPU) | référence |
+| Nemotron-3.5-ASR (NVIDIA) | moins bon en français |
+| whisper.cpp (backend GPU) | **jette des passages entiers** |
 
-Ces colonnes sont qualitatives : elles dépendent du CPU, du modèle et de la
-durée de la case. Mesurez sur votre machine avant d'arbitrer.
+Aucune durée n'est donnée ici, volontairement : elle dépend entièrement du
+matériel, du modèle et de la longueur de la case. Mesurez sur votre machine
+avant d'arbitrer.
 
 Deux pièges documentés dans ce dépôt :
 
@@ -239,10 +249,11 @@ Deux pièges documentés dans ce dépôt :
 
 Les idées et les tâches sont extraites par un modèle de langue servi en local.
 Le modèle attendu est déclaré une seule fois, dans `config.MODELE_LLM`
-(`chocolatine-2-4b`, servi par `llama-server` sur `config.PORT_LLM`), avec une
-liste de repli dans `config.LLM_REPLI`. Si le serveur ne répond pas, l'étape
-est notée comme sautée : le pipeline n'invente jamais une idée à la place du
-modèle.
+(`chocolatine-2-4b`, servi par `llama-server` sur `config.PORT_LLM`). Aucun
+second serveur n'est interrogé en douce : `config.LLM_REPLI` ne contient que
+celui-là, et le programme vérifie l'alias annoncé avant de le croire. Si le
+serveur ne répond pas, l'étape est notée comme sautée : le pipeline n'invente
+jamais une idée à la place du modèle.
 
 ## Vie privée et données
 
@@ -252,9 +263,11 @@ Ce dépôt ne contient **que du code**.
   vocale : ces fichiers sont exclus par `.gitignore` **et** refusés par un
   garde-fou `pre-commit` (activé par `git config core.hooksPath outils/hooks`),
   qui refuse les chemins de compte, les chemins sous `~`, les noms d'hôte
-  écrits en dur, les adresses IP privées, les décomptes de corpus, les
-  adresses e-mail et les extensions de données — y
-  compris dans un fichier `.md`. Les noms de personnes ne sont filtrés que si
+  écrits en dur, les adresses IP privées, les points d'entrée de service local
+  écrits en dur, les décomptes de corpus, les adresses e-mail et les extensions
+  de données — y compris dans un fichier `.md`. Les mêmes contrôles sont
+  rejoués par la CI à chaque push, avec Gitleaks sur tout l'historique. Les
+  noms de personnes ne sont filtrés que si
   vous fournissez votre propre liste locale (`.git/pre-commit-local.txt`,
   modèle dans `outils/hooks/pre-commit-local.example`) : dans un clone neuf,
   cette liste n'existe pas ;

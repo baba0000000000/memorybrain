@@ -53,18 +53,22 @@ personnelle, et aucun outil ne couvre les deux :
 | Contrôle | Ce qu'il refuse |
 |---|---|
 | `gitleaks` | jetons, clés, identifiants dans une URL, clé privée |
-| `outils/verifier_confidentialite.py` | chemins de compte (Unix, Windows), chemins sous `~`, dossiers numérotés d'un disque personnel, identifiant d'appareil de synchronisation, identifiant de locuteur numéroté, nom d'hôte écrit en dur (option passée à un worker, libellé, forme `hôte@fichier`, domaine `.local`), adresses IP privées, décomptes de corpus (un effectif suivi d'un nom de corpus), volumes d'audio ou de calcul, dates de relevé, dispersion de mesures dans un commentaire, modèles de matériel identifiants, adresses e-mail |
+| `outils/verifier_confidentialite.py` | chemins de compte (Unix, Windows), chemins sous `~`, dossiers numérotés d'un disque personnel, identifiant d'appareil de synchronisation, identifiant de locuteur numéroté, nom d'hôte écrit en dur (option passée à un worker, libellé, forme `hôte@fichier`, domaine `.local`), adresses IP privées, point d'entrée de service local écrit en dur, décomptes de corpus (un effectif suivi d'un nom de corpus), volumes d'audio ou de calcul, dates de relevé, dispersion de mesures dans un commentaire, modèles de matériel identifiants, adresses e-mail |
 | `git ls-files -ci --exclude-standard` | fichier ignoré qui reste malgré tout suivi par Git |
 | Liste d'extensions | `.wav`, `.npy`, `.sqlite`, `.apk`, `.keystore`, `.p12`… |
 
 Une fois le hook activé (§ ci-dessous), ces contrôles s'exécutent **avant
-chaque commit**.
+chaque commit**. Ils sont rejoués par la CI à chaque push et à chaque pull
+request, y compris sur un clone où le hook n'a jamais été activé.
 
-> **État réel :** ce dépôt ne contient aucun workflow GitHub Actions — le hook
-> local est la seule barrière, et il ne protège que les commits faits dans un
-> clone où il a été activé. Les motifs sont volontairement larges : un faux
-> positif se contourne avec le marqueur `no-fuite` sur la ligne concernée, un
-> faux négatif ne se rattrape pas.
+> **État réel :** deux barrières, et elles ne couvrent pas la même chose. Le
+> hook local protège les commits d'un clone où il a été activé. Le workflow
+> `.github/workflows/confidentialite.yml` rejoue les mêmes contrôles plus
+> Gitleaks sur tout l'historique, mais seulement pour ce qui passe par GitHub
+> (un push direct, ou une pull request). Rien ne protège un commit qui reste
+> sur votre disque. Les motifs sont volontairement larges : un faux positif se
+> contourne avec le marqueur `no-fuite` sur la ligne concernée, un faux négatif
+> ne se rattrape pas.
 >
 > **Limite à connaître :** ces motifs décrivent des *formes* (un chemin, une
 > IP, un effectif suivi d'un nom de corpus), pas des *valeurs*. Un chiffre

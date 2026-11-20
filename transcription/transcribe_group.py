@@ -5,14 +5,14 @@ séparément : le RTF diminue quand on transcrit un groupe plutôt qu'un
 chunk isolé. Le texte gagne aussi les phrases qui étaient coupées entre
 deux chunks (règle 7).
 
-choisi pour son rapport vitesse/qualité (« Whisper V3 large fast »)
-Nemotron laissé dans les anciens fichiers : le Nvidia est plus lent ET moins
-bon sur ce corpus. Le nom du modèle est dans config.py, jamais ici.
+Choisi pour son rapport vitesse/qualité (« Whisper V3 large fast »). Les
+autres moteurs restent dans les anciens fichiers : Nemotron est plus lent ET
+moins bon en français parlé. Le nom du modèle est dans config.py, jamais ici.
 
 Deux modèles de coût, parce que plusieurs cœurs c'est court :
   - CPU int8 : pas de GPU nécessaire, toujours disponible ;
-  - Vulkan fp16 : plus rapide quand la machine s'y prête, mais exige une
-    pile compatible et dépanne plus souvent (voir les notes dans config).
+  - backend GPU (Vulkan fp16) : plus rapide sur un matériel compatible, mais
+    exige une pile à jour et échoue plus souvent — d'où le repli en cascade.
 La fonction choisit au lancement et journalise ce qu'elle a utilisé.
 
 Règle 18 : le modèle et sa version sont écrits en base à chaque exécution.

@@ -16,7 +16,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 public final class MediaStorePublisher {
-    private static final String RELATIVE_PATH = "Music/MemoryAudio/";
+    // Dossier de publication, réglable à la compilation dans
+    // android/gradle.properties (clé `memorybrain.audioDir`). Aucun chemin
+    // n'est figé ici : la valeur vient de la configuration du build.
+    private static final String RELATIVE_PATH = BuildConfig.AUDIO_RELATIVE_PATH;
     private static final String MIME_TYPE = "audio/wav";
 
     private MediaStorePublisher() {}

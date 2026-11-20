@@ -40,10 +40,13 @@ ALL_DIRS = [
 ]
 
 # Sources audio à ingesting. V1 = banque de tests (§24) + migration.
-# Le téléphone envoie dans syncthing-inbox (Phase 0, ne pas toucher).
+# Le dossier d'entrée est celui où l'outil de synchronisation dépose les
+# fichiers. Son nom par défaut est un choix, pas une obligation : n'importe
+# quel autre nom ou emplacement passe par MEMORYBRAIN_INBOX.
 V1_DONE = PIPELINE_DIR / "done"
 V1_AUDIO = PIPELINE_DIR / "audio"
-SYNC_INBOX = PROJECT_DIR / "syncthing-inbox"
+SYNC_INBOX = Path(os.environ.get("MEMORYBRAIN_INBOX",
+                                 PROJECT_DIR / "syncthing-inbox"))
 
 WIKI = Path(os.environ.get(
     "MEMORYBRAIN_WIKI",
@@ -63,9 +66,10 @@ WIKI = Path(os.environ.get(
 GROUPE_TAILLE = 5
 
 # 2. MODÈLE DE TRANSCRIPTION
-#    Whisper V3 LARGE FAST. Il REMPLACE le modèle Nvidia (Nemotron-3.5-ASR)
-#    qui traîne dans le cache HF : large-v3-turbo est plus rapide
-#    ET meilleur, et le RTF baisse nettement sur un groupe de 5.
+#    Whisper V3 large fast, quantifié int8. Retenu après comparaison avec les
+#    autres moteurs : meilleur en français parlé, et le RTF baisse quand on
+#    transcrit un groupe entier plutôt qu'un chunk isolé. Le nom du modèle
+#    vit ici et nulle part ailleurs.
 MODELE_ASR = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
 MODELE_ASR_NOM = "whisper-v3-large-fast"
 MODELE_DIARISATION = "pyannote/speaker-diarization-community-1"
@@ -89,22 +93,23 @@ POUBELLE_PREFIXE = "memorybrain-v2"
 #    `jpacifico/Chocolatine-2-4B-Instruct-DPO-v2.1` (affiné sur du français),
 #    quantisé Q4_K_M. Il est servi par un serveur OpenAI-compatible local.
 #
-#    Vérifier le modèle réellement servi via `/v1/models` de l'API, jamais
-#    via `/api/tags` (endpoint Ollama) ni via un cache local : un cache ne
-#    dit pas quel modèle répond.
+#    Vérifier le modèle réellement servi via `/v1/models` de l'API, jamais via
+#    un cache local : un cache ne dit pas quel modèle répond.
 #
-#    ⚠ Le serveur doit réserver UN seul slot et un contexte borné : quand
-#    le GPU est partagé avec d'autres processus (serveur d'embeddings), la
-#    réservation par défaut (plusieurs slots × le contexte) épuise la
-#    mémoire et fait tomber le GPU en silence.
+#    ⚠ Le serveur doit réserver UN seul slot et un contexte borné : la
+#    réservation par défaut (plusieurs slots × le contexte) multiplie la
+#    mémoire nécessaire et peut faire échouer l'appel sans message clair.
 PORT_LLM = int(os.environ.get("MEMORYBRAIN_PORT", "8000"))
 MODELE_LLM = os.environ.get("MEMORYBRAIN_LLM_MODELE", "chocolatine-2-4b")
-# Replis, essayés dans l'ordre : le premier sur l'API OpenAI-compatible,
-# le second sur Ollama (port 11434 par défaut).
+# Serveurs essayés dans l'ordre (le nom « REPLI » est historique). Un seul
+# serveur est déclaré ici, et c'est voulu : le programme n'interroge pas un
+# service qu'on ne lui a pas désigné. Si celui-ci ne répond pas, l'étape
+# d'extraction est notée « sautée » (règle 3) plutôt que d'écrire des idées
+# produites par un modèle qu'on n'a pas choisi.
+# Une installation qui veut en déclarer un second ajoute une entrée ici, au
+# format (nom du modèle, port, dialecte) : "openai" ou "ollama".
 LLM_REPLI = [
     (MODELE_LLM, PORT_LLM, "openai"),
-    (os.environ.get("MEMORYBRAIN_LLM_MODELE_OLLAMA", "llama3.1:8b"),
-     11434, "ollama"),
 ]
 
 # 6. EMPLACEMENTS DE TRAVAIL
@@ -230,7 +235,8 @@ def ensure_dirs() -> None:
 
 # -------------------------------------------- 12. DIARISATION (NVIDIA)
 #    Modèle : Nemotron-3-Diarization (Sortformer, jusqu'à 8 locuteurs),
-#    déjà sur le disque, exécuté par le runtime natif NeMo-Speech.cpp.
+#    exécuté par le runtime natif NeMo-Speech.cpp. Aucun poids n'est livré
+#    avec le dépôt : le GGUF se place soi-même, à l'endroit déclaré ci-dessous.
 #
 #    Il rend UNE décision par locuteur et non par fenêtre : le locuteur qui
 #    parle longtemps est jugé d'un bloc, les autres restent du contenu. C'est

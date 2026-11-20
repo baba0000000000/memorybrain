@@ -12,6 +12,20 @@ android {
         targetSdk 36
         versionCode 2
         versionName '2.0.0'
+
+        // Sous-dossier de la bibliothèque audio où l'application publie ses
+        // segments. Réglable sans toucher au code : voir gradle.properties
+        // (`memorybrain.audioDir`). La valeur par défaut est celle qui était
+        // écrite en dur auparavant, pour ne rien changer sur un téléphone
+        // déjà configuré.
+        buildConfigField 'String', 'AUDIO_RELATIVE_PATH',
+                '"' + (project.findProperty('memorybrain.audioDir')
+                        ?: 'Music/MemoryAudio').toString().replaceAll('/+$', '') + '/"'
+    }
+
+    buildFeatures {
+        // Nécessaire pour exposer AUDIO_RELATIVE_PATH ci-dessus.
+        buildConfig true
     }
 
     buildTypes {
